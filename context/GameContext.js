@@ -6,10 +6,10 @@ const GameContext = createContext(null);
 const FLAGS_API = 'https://countriesnow.space/api/v0.1/countries/flag/images';
 const CAPITALS_API = 'https://countriesnow.space/api/v0.1/countries/capital';
 
-const TIMER_SECONDS = 15;
-const HINT_PENALTY = 2;
-const CORRECT_POINTS = 10;
-const WRONG_POINTS = -1;
+export const TIMER_SECONDS = 15;
+export const HINT_PENALTY = 2;
+export const CORRECT_POINTS = 10;
+export const WRONG_POINTS = -1;
 const RANKING_KEY = 'FLAG_GAME_RANKING';
 
 function shuffle(arr) {
@@ -44,8 +44,12 @@ export function GameProvider({ children }) {
   const [ranking, setRanking] = useState([]);
 
   const timerRef = useRef(null);
+  const timeoutRef = useRef(null);
+  const feedbackTimeoutRef = useRef(null);
+  const timerValueRef = useRef(TIMER_SECONDS);
   const scoreRef = useRef(0);
   const gameOverRef = useRef(false);
+  const feedbackRef = useRef(null);
   const currentCountryRef = useRef(null);
   const gameModeRef = useRef('flags');
   const countriesRef = useRef([]);
@@ -53,16 +57,32 @@ export function GameProvider({ children }) {
 
   useEffect(() => { scoreRef.current = score; }, [score]);
   useEffect(() => { gameOverRef.current = gameOver; }, [gameOver]);
+  useEffect(() => { feedbackRef.current = feedback; }, [feedback]);
   useEffect(() => { currentCountryRef.current = currentCountry; }, [currentCountry]);
   useEffect(() => { gameModeRef.current = gameMode; }, [gameMode]);
   useEffect(() => { countriesRef.current = countries; }, [countries]);
   useEffect(() => { capitalsMapRef.current = capitalsMap; }, [capitalsMap]);
+  useEffect(() => { timerValueRef.current = timer; }, [timer]);
 
   useEffect(() => {
     loadRanking();
     fetchData();
-    return () => stopTimer();
+    return () => {
+      stopTimer();
+      clearAllTimeouts();
+    };
   }, []);
+
+  function clearAllTimeouts() {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+    if (feedbackTimeoutRef.current) {
+      clearTimeout(feedbackTimeoutRef.current);
+      feedbackTimeoutRef.current = null;
+    }
+  }
 
   async function loadRanking() {
     try {
@@ -136,34 +156,47 @@ export function GameProvider({ children }) {
   function startTimer() {
     stopTimer();
     setTimer(TIMER_SECONDS);
+    timerValueRef.current = TIMER_SECONDS;
     timerRef.current = setInterval(() => {
       setTimer(prev => {
         if (prev <= 1) {
-          clearInterval(timerRef.current);
-          timerRef.current = null;
+          stopTimer();
+          timerValueRef.current = 0;
           if (!gameOverRef.current) {
             handleTimeout();
           }
           return 0;
         }
-        return prev - 1;
+        const nextVal = prev - 1;
+        timerValueRef.current = nextVal;
+        // Auto-hint for capitals mode: every 5 seconds (at 10s and 5s countdown marks)
+        if (gameModeRef.current === 'capitals' && (nextVal === 10 || nextVal === 5)) {
+          eliminateCapitalOption();
+        }
+        return nextVal;
       });
     }, 1000);
   }
 
   function handleTimeout() {
     if (gameOverRef.current) return;
-    setFeedback({ type: 'timeout', message: '¡Tiempo agotado!' });
     stopTimer();
-    setTimeout(() => {
+    clearAllTimeouts();
+    const fb = { type: 'timeout', message: '¡Tiempo agotado!' };
+    setFeedback(fb);
+    feedbackRef.current = fb;
+    timeoutRef.current = setTimeout(() => {
       endGame();
     }, 1500);
   }
 
   function endGame() {
     stopTimer();
+    clearAllTimeouts();
     setGameOver(true);
     gameOverRef.current = true;
+    setFeedback(null);
+    feedbackRef.current = null;
     const finalScore = scoreRef.current;
     const name = playerName || 'Anónimo';
     if (name.trim()) {
@@ -205,6 +238,7 @@ export function GameProvider({ children }) {
   }
 
   function nextCountry() {
+    clearAllTimeouts();
     const mode = gameModeRef.current;
     const capMap = capitalsMapRef.current;
     const countryList = countriesRef.current;
@@ -214,15 +248,19 @@ export function GameProvider({ children }) {
     currentCountryRef.current = next;
     setRevealedLetters([]);
     setFeedback(null);
+    feedbackRef.current = null;
     setEliminatedOptions([]);
     if (mode === 'capitals') {
       const opts = generateCapitalOptions(next, capMap, countryList);
       setCapitalOptions(opts);
+    } else {
+      setCapitalOptions([]);
     }
     startTimer();
   }
 
   function startGame(name, mode) {
+    clearAllTimeouts();
     setPlayerName(name);
     setGameMode(mode);
     gameModeRef.current = mode;
@@ -231,6 +269,7 @@ export function GameProvider({ children }) {
     setGameOver(false);
     gameOverRef.current = false;
     setFeedback(null);
+    feedbackRef.current = null;
     setRevealedLetters([]);
     setEliminatedOptions([]);
 
@@ -245,10 +284,12 @@ export function GameProvider({ children }) {
     if (mode === 'capitals') {
       const opts = generateCapitalOptions(firstCountry, capMap, countryList);
       setCapitalOptions(opts);
+    } else {
+      setCapitalOptions([]);
     }
 
     setScreen('game');
-    setTimeout(() => startTimer(), 50);
+    timeoutRef.current = setTimeout(() => startTimer(), 50);
   }
 
   function normalizeStr(str) {
@@ -260,54 +301,94 @@ export function GameProvider({ children }) {
   }
 
   function guess(answer) {
-    if (gameOverRef.current || !currentCountryRef.current) return;
+    if (gameOverRef.current || !currentCountryRef.current || feedbackRef.current) return;
     const correct = normalizeStr(currentCountryRef.current.name);
     const given = normalizeStr(answer);
     if (correct === given) {
-      const bonus = timer;
+      const bonus = timerValueRef.current;
       const gained = CORRECT_POINTS + bonus;
       setScore(prev => prev + gained);
       scoreRef.current += gained;
-      setFeedback({ type: 'correct', message: `¡Correcto! +${gained} puntos` });
+      const fb = { type: 'correct', message: `¡Correcto! +${gained} puntos` };
+      setFeedback(fb);
+      feedbackRef.current = fb;
       stopTimer();
-      setTimeout(() => {
+      clearAllTimeouts();
+      feedbackTimeoutRef.current = setTimeout(() => {
         setFeedback(null);
+        feedbackRef.current = null;
         nextCountry();
       }, 1200);
     } else {
       const newScore = Math.max(0, scoreRef.current + WRONG_POINTS);
       setScore(newScore);
       scoreRef.current = newScore;
-      setFeedback({ type: 'wrong', message: 'Incorrecto. -1 punto' });
-      setTimeout(() => setFeedback(null), 1000);
+      const fb = { type: 'wrong', message: 'Incorrecto. -1 punto' };
+      setFeedback(fb);
+      feedbackRef.current = fb;
+      clearAllTimeouts();
+      feedbackTimeoutRef.current = setTimeout(() => {
+        setFeedback(null);
+        feedbackRef.current = null;
+      }, 1000);
     }
   }
 
   function guessCapital(capital) {
-    if (gameOverRef.current || !currentCountryRef.current) return;
+    if (gameOverRef.current || !currentCountryRef.current || feedbackRef.current) return;
     const correct = capitalsMapRef.current[currentCountryRef.current.name];
     if (capital === correct) {
-      const bonus = timer;
+      const bonus = timerValueRef.current;
       const gained = CORRECT_POINTS + bonus;
       setScore(prev => prev + gained);
       scoreRef.current += gained;
-      setFeedback({ type: 'correct', message: `¡Correcto! +${gained} puntos` });
+      const fb = { type: 'correct', message: `¡Correcto! +${gained} puntos` };
+      setFeedback(fb);
+      feedbackRef.current = fb;
       stopTimer();
-      setTimeout(() => {
+      clearAllTimeouts();
+      feedbackTimeoutRef.current = setTimeout(() => {
         setFeedback(null);
+        feedbackRef.current = null;
         nextCountry();
       }, 1200);
     } else {
       const newScore = Math.max(0, scoreRef.current + WRONG_POINTS);
       setScore(newScore);
       scoreRef.current = newScore;
-      setFeedback({ type: 'wrong', message: 'Incorrecto. -1 punto' });
-      setTimeout(() => setFeedback(null), 1000);
+      const fb = { type: 'wrong', message: 'Incorrecto. -1 punto' };
+      setFeedback(fb);
+      feedbackRef.current = fb;
+      clearAllTimeouts();
+      feedbackTimeoutRef.current = setTimeout(() => {
+        setFeedback(null);
+        feedbackRef.current = null;
+      }, 1000);
     }
   }
 
+  function eliminateCapitalOption() {
+    const current = currentCountryRef.current;
+    if (!current) return false;
+    const correct = capitalsMapRef.current[current.name];
+    let didEliminate = false;
+
+    setCapitalOptions(opts => {
+      setEliminatedOptions(prev => {
+        const availableWrong = opts.filter(o => o !== correct && !prev.includes(o));
+        if (availableWrong.length === 0) return prev;
+        const toEliminate = availableWrong[Math.floor(Math.random() * availableWrong.length)];
+        didEliminate = true;
+        return [...prev, toEliminate];
+      });
+      return opts;
+    });
+
+    return didEliminate;
+  }
+
   function useHint() {
-    if (gameOverRef.current || !currentCountryRef.current) return;
+    if (gameOverRef.current || !currentCountryRef.current || feedbackRef.current) return;
 
     if (gameModeRef.current === 'flags') {
       const name = currentCountryRef.current.name;
@@ -319,36 +400,52 @@ export function GameProvider({ children }) {
           letterIndex++;
         }
       }
-      setRevealedLetters(prev => {
-        const unrevealed = allIndices.filter(idx => !prev.includes(idx));
-        if (unrevealed.length === 0) return prev;
-        const pick = unrevealed[Math.floor(Math.random() * unrevealed.length)];
-        return [...prev, pick];
-      });
+      const unrevealed = allIndices.filter(idx => !revealedLetters.includes(idx));
+      if (unrevealed.length === 0) return;
+
+      const pick = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+      setRevealedLetters(prev => (prev.includes(pick) ? prev : [...prev, pick]));
+
       setTimer(prev => {
         const next = Math.max(0, prev - HINT_PENALTY);
+        timerValueRef.current = next;
         if (next === 0) {
           stopTimer();
-          setTimeout(() => handleTimeout(), 50);
+          clearAllTimeouts();
+          timeoutRef.current = setTimeout(() => handleTimeout(), 50);
         }
         return next;
       });
     } else {
-      setCapitalOptions(opts => {
-        const correct = capitalsMapRef.current[currentCountryRef.current.name];
-        setEliminatedOptions(prev => {
-          const available = opts.filter(o => o !== correct && !prev.includes(o));
-          if (available.length === 0) return prev;
-          const toEliminate = available[Math.floor(Math.random() * available.length)];
-          return [...prev, toEliminate];
-        });
-        return opts;
+      const current = currentCountryRef.current;
+      if (!current) return;
+      const correct = capitalsMapRef.current[current.name];
+      const remainingWrong = capitalOptions.filter(o => o !== correct && !eliminatedOptions.includes(o));
+      if (remainingWrong.length === 0) return;
+
+      eliminateCapitalOption();
+
+      setTimer(prev => {
+        const next = Math.max(0, prev - HINT_PENALTY);
+        timerValueRef.current = next;
+        if (next === 0) {
+          stopTimer();
+          clearAllTimeouts();
+          timeoutRef.current = setTimeout(() => handleTimeout(), 50);
+        }
+        return next;
       });
     }
   }
 
+  function resetScore() {
+    setScore(0);
+    scoreRef.current = 0;
+  }
+
   function resetGame() {
     stopTimer();
+    clearAllTimeouts();
     setScore(0);
     scoreRef.current = 0;
     setGameOver(false);
@@ -356,6 +453,7 @@ export function GameProvider({ children }) {
     setCurrentCountry(null);
     currentCountryRef.current = null;
     setFeedback(null);
+    feedbackRef.current = null;
     setRevealedLetters([]);
     setEliminatedOptions([]);
     setCapitalOptions([]);
@@ -368,13 +466,17 @@ export function GameProvider({ children }) {
     playerName,
     setPlayerName,
     gameMode,
+    setGameMode,
     countries,
     capitalsMap,
     loading,
     error,
     currentCountry,
     score,
+    setScore,
+    resetScore,
     timer,
+    setTimer,
     gameOver,
     feedback,
     revealedLetters,
@@ -388,6 +490,14 @@ export function GameProvider({ children }) {
     useHint,
     resetGame,
     endGame,
+    startTimer,
+    stopTimer,
+    loadRanking,
+    saveRanking,
+    TIMER_SECONDS,
+    HINT_PENALTY,
+    CORRECT_POINTS,
+    WRONG_POINTS,
   };
 
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>;

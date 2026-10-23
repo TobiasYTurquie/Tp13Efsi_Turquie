@@ -13,9 +13,17 @@ export default function HintButton() {
     currentCountry,
     revealedLetters,
     feedback,
+    HINT_PENALTY = 2,
   } = useGame();
 
-  const isDisabled = gameOver || timer === 0 || !!feedback;
+  const noHintsLeft =
+    gameMode === 'capitals'
+      ? (capitalOptions ? capitalOptions.filter(o => !eliminatedOptions.includes(o)).length <= 1 : true)
+      : currentCountry
+      ? (currentCountry.name.replace(/\s+/g, '').length - revealedLetters.length) <= 0
+      : true;
+
+  const isDisabled = gameOver || timer === 0 || !!feedback || noHintsLeft;
 
   function getLabel() {
     if (gameMode === 'capitals') {
@@ -23,9 +31,8 @@ export default function HintButton() {
       const available = capitalOptions.filter(
         o => !eliminatedOptions.includes(o)
       );
-      const correct = available.length;
-      if (correct <= 1) return '🔍 Sin pistas';
-      return '🔍 Eliminar opción';
+      if (available.length <= 1) return '🔍 Sin pistas';
+      return `🔍 Eliminar opción (-${HINT_PENALTY}s)`;
     }
     if (!currentCountry) return '💡 Pista';
     const name = currentCountry.name;
@@ -35,7 +42,7 @@ export default function HintButton() {
     }
     const unrevealed = letterCount - revealedLetters.length;
     if (unrevealed <= 0) return '💡 Sin pistas';
-    return `💡 Pista (-${2}s)`;
+    return `💡 Pista (-${HINT_PENALTY}s)`;
   }
 
   return (
