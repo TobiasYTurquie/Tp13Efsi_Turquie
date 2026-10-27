@@ -6,13 +6,24 @@ export default function Flag() {
   const { currentCountry } = useGame();
   const [imgLoading, setImgLoading] = React.useState(true);
   const [imgError, setImgError] = React.useState(false);
+  const [useFallback, setUseFallback] = React.useState(false);
 
   React.useEffect(() => {
     setImgLoading(true);
     setImgError(false);
+    setUseFallback(false);
   }, [currentCountry]);
 
   if (!currentCountry) return null;
+
+  // React Native's Image component does not natively render SVGs.
+  // CountriesNow flags are typically SVG format from Wikimedia.
+  // FlagCDN provides high quality PNG flags indexed by ISO2 code.
+  const primaryUri = currentCountry.iso2
+    ? `https://flagcdn.com/w320/${currentCountry.iso2.toLowerCase()}.png`
+    : currentCountry.flag;
+
+  const currentUri = useFallback ? currentCountry.flag : primaryUri;
 
   return (
     <View style={styles.container}>
@@ -25,13 +36,18 @@ export default function Flag() {
         </View>
       ) : (
         <Image
-          source={{ uri: currentCountry.flag }}
+          source={{ uri: currentUri }}
           style={[styles.flag, imgLoading && { opacity: 0 }]}
           resizeMode="contain"
           onLoad={() => setImgLoading(false)}
           onError={() => {
-            setImgLoading(false);
-            setImgError(true);
+            if (!useFallback && currentCountry.flag && currentCountry.flag !== primaryUri) {
+              setUseFallback(true);
+              setImgLoading(true);
+            } else {
+              setImgLoading(false);
+              setImgError(true);
+            }
           }}
         />
       )}

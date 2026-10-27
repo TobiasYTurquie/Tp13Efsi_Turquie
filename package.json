@@ -1,7 +1,7 @@
 {
   "name": "tp13efsi-turquie",
   "version": "1.0.0",
-  "main": "App.js",
+  "main": "index.js",
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
@@ -9,6 +9,7 @@
     "lint": "expo lint"
   },
   "dependencies": {
+    "@expo/ngrok": "^4.1.0",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~58.0.0",
     "expo-status-bar": "~58.0.1",

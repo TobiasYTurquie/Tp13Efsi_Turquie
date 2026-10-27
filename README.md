@@ -1,6 +1,6 @@
 # 🌍 Flag Quiz Mobile - Adivina Banderas y Capitales
 
-Aplicación móvil interactiva desarrollada con **React Native** y **Expo (SDK 57)**, diseñada para poner a prueba y expandir tus conocimientos sobre geografía mundial. El juego desafía al usuario a identificar banderas nacionales y capitales bajo presión de tiempo, con retroalimentación inmediata, pistas progresivas y una tabla de posiciones persistente.
+Aplicación móvil interactiva desarrollada con **React Native** y **Expo**, diseñada para poner a prueba y expandir tus conocimientos sobre geografía mundial. El juego desafía al usuario a identificar banderas nacionales y capitales bajo presión de tiempo, con retroalimentación inmediata, pistas progresivas y una tabla de posiciones persistente.
 
 ---
 
@@ -42,9 +42,10 @@ Aplicación móvil interactiva desarrollada con **React Native** y **Expo (SDK 5
 
 ```text
 Tp13Efsi_Turquie/
-├── App.js                      # Punto de entrada de la aplicación; monta GameProvider y Navigation
+├── index.js                    # Punto de entrada de Expo (registra el componente raíz con registerRootComponent)
+├── App.js                      # Componente raíz; monta GameProvider y Navigation
 ├── app.json                    # Configuración general de Expo (nombre, slug, orientación, etc.)
-├── package.json                # Dependencias (Expo SDK 57, React Native 0.86, React 19)
+├── package.json                # Configuración de scripts, dependencias y main apuntando a index.js
 ├── context/
 │   └── GameContext.js          # Estado global único (GameProvider y hook useGame)
 ├── screens/
@@ -54,7 +55,7 @@ Tp13Efsi_Turquie/
 │   └── LeaderboardScreen.js    # Pantalla completa de la tabla de posiciones histórica
 └── components/
     ├── Navigation.js           # Enrutador condicional basado en el estado del Context
-    ├── Flag.js                 # Renderizado de la bandera con feedback de carga y error
+    ├── Flag.js                 # Renderizado de la bandera con feedback de carga, error y fallback PNG
     ├── ScoreBoard.js           # Marcador de puntaje y nombre del jugador activo
     ├── Timer.js                # Contador de 15s con cambio cromático de alerta
     ├── GuessForm.js            # Formulario de texto (Banderas) o botones de opciones (Capitales)
@@ -85,31 +86,31 @@ En estricto cumplimiento de la consigna:
 
 ---
 
-## 📱 Requisitos e Instrucciones de Ejecución (Expo SDK 57)
+## 📱 Requisitos e Instrucciones de Ejecución
 
 ### Prerrequisitos
 - **Node.js** (versión 18 o superior recomendada).
 - **npm** (incluido con Node.js).
-- **Dispositivo móvil físico** (Android o iOS) con la app **Expo Go** actualizada instalada desde Google Play Store o Apple App Store.
+- **Dispositivo móvil físico** (Android o iOS) con la app **Expo Go** actualizada instalada desde Google Play Store o Apple App Store, o un emulador/simulador configurado.
 
-### Pasos de Instalación y Puesta en Marcha
+### Pasos de Puesta en Marcha
 
 1. **Abrir una terminal en la carpeta del proyecto**:
    ```bash
    cd c:\Users\49551134\Downloads\Tp13Efsi_Turquie
    ```
 
-2. **Instalar dependencias**:
-   ```bash
-   npm install
-   ```
-
-3. **Iniciar el servidor de desarrollo de Expo**:
+2. **Iniciar el servidor de desarrollo de Expo**:
    ```bash
    npx expo start
    ```
 
-4. **Conectar el dispositivo móvil**:
+   > **Tip**: Si cambiaste la configuración de entrada o dependencias, inicia limpiando la caché de Metro:
+   > ```bash
+   > npx expo start -c
+   > ```
+
+3. **Conectar el dispositivo móvil**:
    - Asegúrate de que tu celular y tu computadora estén conectados a la **misma red Wi-Fi**.
    - En **Android**: Abrí la app **Expo Go**, seleccioná *"Scan QR code"* y escaneá el código QR mostrado en la terminal.
    - En **iOS**: Abrí la app de la **Cámara nativa**, apuntá al código QR y presioná la notificación para abrir en **Expo Go**.
@@ -126,10 +127,10 @@ npx expo start --tunnel
 
 | Problema | Causa probable | Solución sugerida |
 | :--- | :--- | :--- |
-| **"Could not connect to development server"** | Celular y PC en redes distintas o firewall bloqueando el puerto 8081. | 1. Ejecutar con `npx expo start --tunnel`.<br>2. Comprobar que ambos equipos estén en la misma red Wi-Fi (desactivar datos móviles en el celular).<br>3. Permitir Node.js en el Firewall de Windows. |
-| **Banderas no cargan o pantalla de error** | Sin acceso a la API externa de CountriesNow. | Verificar la conexión a internet. La app incluye indicadores de carga y mensajes de reintento automático. |
+| **"The app entry point named 'main' not registered"** | El archivo `package.json` apuntaba a `App.js` en lugar de `index.js`. | Configurar `"main": "index.js"` en `package.json`. En `index.js` se invoca `registerRootComponent(App)`. |
+| **"Could not connect to development server"** | Celular y PC en redes distintas o firewall bloqueando el puerto 8081. | 1. Ejecutar con `npx expo start --tunnel`.<br>2. Comprobar que ambos equipos estén en la misma red Wi-Fi.<br>3. Permitir Node.js en el Firewall de Windows. |
+| **Banderas no cargan o pantalla de error** | Formato SVG de la API incompatible con Image de React Native. | `Flag.js` implementa resolución mediante código ISO2 a PNG de alta velocidad (FlagCDN) con fallback a la API original. |
 | **Cambios de código no se reflejan** | Caché del empaquetador Metro acumulada. | Detener el servidor con `Ctrl + C` e iniciar limpiando caché: `npx expo start -c`. |
-| **Nombre de país no aceptado a pesar de ser correcto** | Discrepancia en mayúsculas o acentos. | La app cuenta con normalización NFD interna (`Argentina`, `argentina`, `ARGENTINA`, `áRgentina` son igualmente válidos). |
 
 ---
 
@@ -174,35 +175,67 @@ npx expo start --tunnel
 | **+3** | **Plus 3: Sistema de pistas progresivas (-2s por pista)** | **CUMPLIDO** | `HintDisplay.js` revela letras con penalización de -2s por pista. |
 | **+4** | **Plus 4: Segundo modo de juego (Modo Capitales)** | **CUMPLIDO** | 3 opciones, auto-eliminación cada 5s y pista manual protegida de eliminar la respuesta correcta. |
 
-Voy a validar la instalación real del proyecto para detectar el punto exacto de fallo y corregir la configuración de Expo/React Native para SDK 57.
+Corregi los errores de inicializacion de este proyecto, error: App entry not found The app entry point named "main" not registered...
 
-npm install
-node -v; npm -v; npm install
-Ya confirmé que la config de SDK es la correcta, pero necesito cerrar un problema de entorno/instalación para que Expo pueda arrancar bien en este proyecto. Voy a ajustar la configuración y validar la carga.
+El error App entry not found The app entry point named "main" not registered ha sido corregido.
 
-echo %CD% ; node -v ; npm -v
-cmd.exe /c "cd /d c:\Users\49551134\Downloads\Tp13Efsi_Turquie && node -v && npm -v && npx expo --version"
-He dejado el proyecto ajustado para Expo SDK 57 y con una configuración válida para iniciar.
+🔍 Causa del Problema
 
-Cambios principales:
+  
+En package.json, la propiedad "main" estaba configurada como:
+  
+json
+"main": "App.js"
 
-Corregí app.json:
-sdkVersion: "57.0.0"
-slug normalizado a tp13efsi-turquie
-mantuve name, version, y configuración de Android/iOS compatibles con Expo
-La versión del proyecto ya estaba alineada con SDK 57:
-expo: "~57.0.9"
-react-native: "0.86.2"
-react: "19.2.3"
-No encontré errores de sintaxis en el proyecto base, y la app queda lista para arrancar con Expo.
+  
 
-Comandos para probar en tu máquina:
+  
+Al iniciar, el empaquetador Metro tomaba directamente App.js, el cual solo exporta el componente React, pero nunca ejecuta registerRootComponent(App) (que es la función de Expo encargada de llamar internamente a AppRegistry.registerComponent('main', ...)).
 
-cd c:\Users\49551134\Downloads\Tp13Efsi_Turquie
-npm install
-npx expo start
-Si el arranque sigue fallando, ejecuta:
+  
+React Native buscaba el punto de entrada registrado con el nombre "main" y, al no encontrarlo, arrojaba el error de inicialización.
 
-npx expo install --fix
-npx expo-doctor
-Nota: en este entorno la terminal del sistema falló al lanzar procesos nativos (error 1260), así que no pude ejecutar el bundler desde aquí, pero la configuración del proyecto quedó corregida para SDK 57 y lista para cargar.
+  
+El archivo index.js ya existía en la raíz con la llamada correcta:
+  
+javascript
+import { registerRootComponent } from 'expo';
+import App from './App';
+registerRootComponent(App);
+
+  pero Metro lo ignoraba por completo porque el package.json apuntaba a App.js.
+
+  
+🛠️ Solución Aplicada
+
+  
+
+  
+
+Configuración del Entry Point en package.json:
+Se corrigió la propiedad "main" para que apunte a index.js:
+
+
+  
+json
+"main": "index.js",
+
+  
+
+  
+
+  
+
+Mejora en Flag.js:
+La API de CountriesNow devuelve banderas en formato .svg (Wikimedia), el cual no es soportado de forma nativa por el componente <Image> de React Native sin librerías adicionales. Se configuró la resolución a PNG mediante el código iso2 (FlagCDN) con fallback automático para asegurar que las banderas carguen de forma fluida.
+
+
+  
+
+  
+🚀 Cómo iniciar el proyecto
+
+En tu terminal, ejecuta limpiando la caché de Metro para asegurar que tome el nuevo punto de entrada:
+
+bash
+npx expo start -c
